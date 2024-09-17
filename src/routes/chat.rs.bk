@@ -219,40 +219,54 @@ fn build_triton_request(
     let chat_history = history_builder.build_history(&request.messages)?;
     tracing::debug!("chat history after formatting: {}", chat_history);
 
-    let mut sampling_parameters = request.sampling_parameters.clone();
-
-    // Overwrite the max_tokens field with request.max_tokens
-    if let Some(obj) = sampling_parameters.as_object_mut() {
-        obj.insert("max_tokens".to_string(), serde_json::Value::Number(request.max_tokens.into()));
-        obj.insert("temperature".to_string(), serde_json::Value::Number(
-                serde_json::Number::from_f64(request.temperature as f64).unwrap()
-            ));
-        obj.insert("top_p".to_string(), serde_json::Value::Number(
-                serde_json::Number::from_f64(request.top_p as f64).unwrap()
-            ));
-    }
-
-    // Serialize the modified sampling_parameters back to a JSON string
-    let modified_sampling_parameters_data = serde_json::to_string(&sampling_parameters)?;
-
-    // Convert the JSON string to bytes
-    let sampling_parameters_data = modified_sampling_parameters_data.as_bytes().to_vec();
-
     let mut builder = Builder::new()
         .model_name(request.model)
         .input(
             "text_input",
-            [1],
+            [1, 1],
             InferTensorData::Bytes(vec![chat_history.as_bytes().to_vec()]),
         )
         .input(
-            "sampling_parameters",
-            [1],
-            InferTensorData::Bytes(vec![sampling_parameters_data]),
+            "max_tokens",
+            [1, 1],
+            InferTensorData::Int32(vec![request.max_tokens as i32]),
+        )
+        .input(
+            "bad_words",
+            [1, 1],
+            InferTensorData::Bytes(vec!["".as_bytes().to_vec()]),
+        )
+        .input(
+            "stop_words",
+            [1, request.stop.as_ref().map_or(1, |s| s.len() as i64)],
+            InferTensorData::Bytes(
+                request
+                    .stop
+                    .unwrap_or_else(|| vec!["</s>".to_string()])
+                    .into_iter()
+                    .map(|s| s.into_bytes())
+                    .collect(),
+            ),
+        )
+        .input("top_p", [1, 1], InferTensorData::FP32(vec![request.top_p]))
+        .input(
+            "temperature",
+            [1, 1],
+            InferTensorData::FP32(vec![request.temperature]),
+        )
+        .input(
+            "presence_penalty",
+            [1, 1],
+            InferTensorData::FP32(vec![request.presence_penalty]),
+        )
+        .input(
+            "beam_width",
+            [1, 1],
+            InferTensorData::Int32(vec![request.n as i32]),
         )
         .input(
             "stream",
-            [1],
+            [1, 1],
             InferTensorData::Bool(vec![request.stream]),
         )
         .output("text_output");
@@ -320,9 +334,6 @@ pub(crate) struct ChatCompletionCreateParams {
     // Not supported yet:
     // tools
     // tool_choices
-
-    #[serde(default = "default_sampling_parameters")]
-    sampling_parameters: serde_json::Value,
 }
 
 #[allow(dead_code)]
@@ -487,12 +498,4 @@ fn default_temperature() -> f32 {
 
 fn default_top_p() -> f32 {
     1.0
-}
-
-fn default_sampling_parameters() -> serde_json::Value {
-    serde_json::json!({
-        "temperature": 0.1,
-        "top_p": 0.95,
-        "max_tokens": 100,
-    })
 }
