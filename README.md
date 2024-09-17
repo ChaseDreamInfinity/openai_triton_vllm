@@ -1,4 +1,4 @@
-# openai_trtllm - OpenAI-compatible API for TensorRT-LLM
+# openai_trtllm - OpenAI-compatible API for Triton Inference Server with vLLM backend
 
 Provide an OpenAI-compatible API for [vLLM](https://github.com/vllm-project/vllm)
 and [NVIDIA Triton Inference Server](https://github.com/triton-inference-server/tensorrtllm_backend), which allows you
